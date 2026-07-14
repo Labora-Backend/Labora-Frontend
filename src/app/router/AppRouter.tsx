@@ -4,26 +4,44 @@ import { ClientRoute } from '@/app/router/ClientRoute'
 import { FreelancerRoute } from '@/app/router/FreelancerRoute'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { AdminDashboard } from '@/features/admin/AdminDashboard'
-import { ClientDashboard } from '@/features/client/ClientDashboard'
+import { ClientDashboardLayout } from '@/features/client/layout/ClientDashboardLayout'
+import { ClientDashboard } from '@/features/client/pages/ClientDashboard'
 import { FreelancerDashboard } from '@/features/freelancer/FreelancerDashboard'
+import ProfileSetupPage from '@/features/auth/pages/ProfileSetupPage'
+import { LoginPage } from '@/features/auth/pages/LoginPage'
+import { RegisterPage } from '@/features/auth/pages/RegisterPage'
 import { Landing } from '@/pages/Landing'
-import { Login } from '@/pages/Login'
 import { NotFound } from '@/pages/NotFound'
-import { Register } from '@/pages/Register'
 import { Unauthorized } from '@/pages/Unauthorized'
 
 const router = createBrowserRouter([
   { path: '/', element: <Landing /> },
-  { path: '/login', element: <Login /> },
-  { path: '/register', element: <Register /> },
+  { path: '/login', element: <LoginPage /> },
+  { path: '/register', element: <RegisterPage /> },
   { path: '/unauthorized', element: <Unauthorized /> },
+  {
+    path: '/client/profile/setup',
+    element: (
+      <ClientRoute>
+        <ProfileSetupPage role="client" />
+      </ClientRoute>
+    ),
+  },
+  {
+    path: '/freelancer/profile/setup',
+    element: (
+      <FreelancerRoute>
+        <ProfileSetupPage role="freelancer" />
+      </FreelancerRoute>
+    ),
+  },
   {
     path: '/client/dashboard',
     element: (
       <ClientRoute>
-        <DashboardLayout>
+        <ClientDashboardLayout>
           <ClientDashboard />
-        </DashboardLayout>
+        </ClientDashboardLayout>
       </ClientRoute>
     ),
   },
