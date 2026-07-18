@@ -1,5 +1,13 @@
 import { api } from '@/services/api/axios'
-import type { ClientDashboardData } from '@/features/client/types/dashboard'
+import type {
+  ClientDashboardData,
+  LatestApplication,
+  RecentJob,
+} from '@/features/client/types/dashboard'
+
+type CountSummary = { count: number }
+type PaymentSummary = { totalSpent: number }
+type ApiResponse<T> = T | { data: T }
 
 /** Backend service endpoint placeholders */
 export const CLIENT_API_ENDPOINTS = {
@@ -10,6 +18,14 @@ export const CLIENT_API_ENDPOINTS = {
   notifications: '/clients/notifications/unread-count',
   payments: '/clients/payments/summary',
 } as const
+
+const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString()
+const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString()
+const daysFromNow = (days: number) => {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  return date.toISOString().slice(0, 10)
+}
 
 export const mockClientDashboardData: ClientDashboardData = {
   stats: {
@@ -96,7 +112,7 @@ export const mockClientDashboardData: ClientDashboardData = {
       skill: 'Full Stack Developer',
       jobTitle: 'Senior React Developer',
       status: 'new',
-      appliedAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+      appliedAt: hoursAgo(2),
     },
     {
       id: '2',
@@ -105,7 +121,7 @@ export const mockClientDashboardData: ClientDashboardData = {
       skill: 'UI/UX Designer',
       jobTitle: 'Mobile App UI/UX Design',
       status: 'viewed',
-      appliedAt: new Date(Date.now() - 5 * 3_600_000).toISOString(),
+      appliedAt: hoursAgo(5),
     },
     {
       id: '3',
@@ -114,7 +130,7 @@ export const mockClientDashboardData: ClientDashboardData = {
       skill: 'DevOps Engineer',
       jobTitle: 'AWS Cloud Migration',
       status: 'shortlisted',
-      appliedAt: new Date(Date.now() - 24 * 3_600_000).toISOString(),
+      appliedAt: hoursAgo(24),
     },
     {
       id: '4',
@@ -123,7 +139,7 @@ export const mockClientDashboardData: ClientDashboardData = {
       skill: 'Content Writer',
       jobTitle: 'Content Marketing Strategy',
       status: 'rejected',
-      appliedAt: new Date(Date.now() - 48 * 3_600_000).toISOString(),
+      appliedAt: hoursAgo(48),
     },
   ],
   realTimeActivity: [
@@ -132,42 +148,42 @@ export const mockClientDashboardData: ClientDashboardData = {
       type: 'application_received',
       title: 'Application Received',
       description: 'Sarah Chen applied for Senior React Developer',
-      timestamp: new Date(Date.now() - 30 * 60_000).toISOString(),
+      timestamp: minutesAgo(30),
     },
     {
       id: '2',
       type: 'proposal_accepted',
       title: 'Proposal Accepted',
       description: 'Elena Rodriguez was hired for AWS Cloud Migration',
-      timestamp: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+      timestamp: hoursAgo(2),
     },
     {
       id: '3',
       type: 'new_message',
       title: 'New Message',
       description: 'Marcus Johnson sent a message about UI/UX project',
-      timestamp: new Date(Date.now() - 4 * 3_600_000).toISOString(),
+      timestamp: hoursAgo(4),
     },
     {
       id: '4',
       type: 'payment_completed',
       title: 'Payment Completed',
       description: '$2,500 released for Data Pipeline Setup milestone',
-      timestamp: new Date(Date.now() - 24 * 3_600_000).toISOString(),
+      timestamp: hoursAgo(24),
     },
     {
       id: '5',
       type: 'job_completed',
       title: 'Job Completed',
       description: 'Data Pipeline Setup project marked as complete',
-      timestamp: new Date(Date.now() - 48 * 3_600_000).toISOString(),
+      timestamp: hoursAgo(48),
     },
   ],
   upcomingDeadlines: [
-    { id: '1', jobName: 'Senior React Developer', dueDate: '2026-07-13', daysRemaining: 2 },
-    { id: '2', jobName: 'Mobile App UI/UX Design', dueDate: '2026-07-16', daysRemaining: 5 },
-    { id: '3', jobName: 'AWS Cloud Migration', dueDate: '2026-07-23', daysRemaining: 12 },
-    { id: '4', jobName: 'Content Marketing Strategy', dueDate: '2026-07-30', daysRemaining: 19 },
+    { id: '1', jobName: 'Senior React Developer', dueDate: daysFromNow(2), daysRemaining: 2 },
+    { id: '2', jobName: 'Mobile App UI/UX Design', dueDate: daysFromNow(5), daysRemaining: 5 },
+    { id: '3', jobName: 'AWS Cloud Migration', dueDate: daysFromNow(12), daysRemaining: 12 },
+    { id: '4', jobName: 'Content Marketing Strategy', dueDate: daysFromNow(19), daysRemaining: 19 },
   ],
   profile: {
     name: 'James Wilson',
@@ -179,10 +195,22 @@ export const mockClientDashboardData: ClientDashboardData = {
   unreadMessages: 12,
 }
 
+function unwrapApiResponse<T>(response: ApiResponse<T>): T {
+  if (
+    response &&
+    typeof response === 'object' &&
+    'data' in response
+  ) {
+    return response.data
+  }
+
+  return response
+}
+
 async function fetchWithFallback<T>(endpoint: string, fallback: T): Promise<T> {
   try {
-    const { data } = await api.get<T>(endpoint)
-    return data
+    const { data } = await api.get<ApiResponse<T>>(endpoint)
+    return unwrapApiResponse(data)
   } catch {
     return fallback
   }
@@ -198,27 +226,30 @@ export const clientDashboardApi = {
       mockClientDashboardData,
     ),
 
-  getJobs: () =>
-    fetchWithFallback(CLIENT_API_ENDPOINTS.jobs, mockClientDashboardData.recentJobs),
+  getJobs: (): Promise<RecentJob[]> =>
+    fetchWithFallback<RecentJob[]>(
+      CLIENT_API_ENDPOINTS.jobs,
+      mockClientDashboardData.recentJobs,
+    ),
 
-  getApplications: () =>
-    fetchWithFallback(
+  getApplications: (): Promise<LatestApplication[]> =>
+    fetchWithFallback<LatestApplication[]>(
       CLIENT_API_ENDPOINTS.applications,
       mockClientDashboardData.latestApplications,
     ),
 
-  getUnreadMessages: () =>
-    fetchWithFallback(CLIENT_API_ENDPOINTS.messages, {
+  getUnreadMessages: (): Promise<CountSummary> =>
+    fetchWithFallback<CountSummary>(CLIENT_API_ENDPOINTS.messages, {
       count: mockClientDashboardData.unreadMessages,
     }),
 
-  getUnreadNotifications: () =>
-    fetchWithFallback(CLIENT_API_ENDPOINTS.notifications, {
+  getUnreadNotifications: (): Promise<CountSummary> =>
+    fetchWithFallback<CountSummary>(CLIENT_API_ENDPOINTS.notifications, {
       count: mockClientDashboardData.unreadNotifications,
     }),
 
-  getPaymentSummary: () =>
-    fetchWithFallback(CLIENT_API_ENDPOINTS.payments, {
+  getPaymentSummary: (): Promise<PaymentSummary> =>
+    fetchWithFallback<PaymentSummary>(CLIENT_API_ENDPOINTS.payments, {
       totalSpent: mockClientDashboardData.stats.totalBudgetSpent,
     }),
 }

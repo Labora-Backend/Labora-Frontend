@@ -25,13 +25,18 @@ export function useAuth() {
     mutationFn: (payload: LoginPayload) => authApi.login(payload),
     onMutate: () => dispatch(setLoading(true)),
     onSuccess: (data, variables) => {
+      console.log('[useAuth.login] response user.role', data.user.role)
       dispatch(setCredentials(data))
       if (variables.rememberMe) {
         localStorage.setItem('labora_remember', 'true')
       } else {
         localStorage.removeItem('labora_remember')
       }
-      navigate(ROLE_PATHS[data.user.role])
+      const targetRoute = ROLE_PATHS[data.user.role]
+      console.log('[useAuth.login] current user.role', data.user.role)
+      console.log('[useAuth.login] stored labora_auth', localStorage.getItem('labora_auth'))
+      console.log('[useAuth.login] target route', targetRoute)
+      navigate(targetRoute)
     },
     onError: () => dispatch(setLoading(false)),
     onSettled: () => dispatch(setLoading(false)),
@@ -41,6 +46,7 @@ export function useAuth() {
     mutationFn: (payload: RegisterPayload) => authApi.register(payload),
     onMutate: () => dispatch(setLoading(true)),
     onSuccess: (data) => {
+      console.log('[useAuth.register] response user.role', data.user.role)
       dispatch(setCredentials(data))
       const role = data.user.role
       if (role === 'client' || role === 'freelancer') {

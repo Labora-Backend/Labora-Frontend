@@ -3,6 +3,7 @@ import { api } from '@/services/api/axios'
 import type {
   AuthApiEndpoints,
   AuthResponse,
+  AuthTokens,
   ClientRegisterPayload,
   FreelancerRegisterPayload,
   LoginPayload,
@@ -21,33 +22,81 @@ export const AUTH_ENDPOINTS: AuthApiEndpoints = {
 
 const emailSchema = z.string().email()
 const isEmail = (value: string) => emailSchema.safeParse(value).success
+const USER_ROLES = ['client', 'freelancer', 'admin'] as const
 
-function resolveRole(email: string, preferredRole?: UserRole): UserRole {
-  if (preferredRole) return preferredRole
-  if (email.includes('admin')) return 'admin'
-  if (email.includes('freelancer')) return 'freelancer'
-  return 'client'
+type UnknownRecord = Record<string, unknown>
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
 }
 
-function createMockAuthResponse(
-  name: string,
-  email: string,
-  username?: string,
-  role?: UserRole,
-): AuthResponse {
-  const user: User = {
-    id: crypto.randomUUID(),
-    name,
-    username,
-    email,
-    role: resolveRole(email, role),
+function isUserRole(value: unknown): value is UserRole {
+  return typeof value === 'string' && USER_ROLES.includes(value as UserRole)
+}
+
+function unwrapDataResponse(response: unknown): unknown {
+  if (isRecord(response) && 'data' in response) {
+    return unwrapDataResponse(response.data)
   }
+
+  return response
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined
+}
+
+function normalizeTokens(response: UnknownRecord): AuthTokens {
+  const tokenSource = isRecord(response.tokens) ? response.tokens : response
+  const accessToken = readString(tokenSource.accessToken)
+    ?? readString(tokenSource.access)
+    ?? readString(tokenSource.access_token)
+  const refreshToken = readString(tokenSource.refreshToken)
+    ?? readString(tokenSource.refresh)
+    ?? readString(tokenSource.refresh_token)
+
+  if (!accessToken) {
+    throw new Error('Auth response is missing an access token')
+  }
+
   return {
-    user,
-    tokens: {
-      accessToken: `mock-access-${Date.now()}`,
-      refreshToken: `mock-refresh-${Date.now()}`,
-    },
+    accessToken,
+    refreshToken,
+  }
+}
+
+function normalizeUser(response: UnknownRecord): User {
+  if (!isRecord(response.user)) {
+    throw new Error('Auth response is missing user data')
+  }
+
+  const role = response.user.role
+  if (!isUserRole(role)) {
+    throw new Error('Auth response is missing a valid user.role')
+  }
+
+  return {
+    id: readString(response.user.id) ?? String(response.user.id ?? ''),
+    name: readString(response.user.name)
+      ?? readString(response.user.fullName)
+      ?? readString(response.user.full_name)
+      ?? readString(response.user.username)
+      ?? '',
+    username: readString(response.user.username),
+    email: readString(response.user.email) ?? '',
+    role,
+  }
+}
+
+function normalizeAuthResponse(response: unknown): AuthResponse {
+  const unwrapped = unwrapDataResponse(response)
+  if (!isRecord(unwrapped)) {
+    throw new Error('Auth response must be an object')
+  }
+
+  return {
+    user: normalizeUser(unwrapped),
+    tokens: normalizeTokens(unwrapped),
   }
 }
 
@@ -104,14 +153,6 @@ function buildRegisterRequest(payload: RegisterPayload) {
   }
 }
 
-async function withFallback<T>(request: () => Promise<T>, fallback: T): Promise<T> {
-  try {
-    return await request()
-  } catch {
-    return fallback
-  }
-}
-
 async function postRegister(payload: RegisterPayload): Promise<AuthResponse> {
   const { body, file } = buildRegisterRequest(payload)
 
@@ -127,34 +168,31 @@ async function postRegister(payload: RegisterPayload): Promise<AuthResponse> {
     })
     formData.append('profile_image', file)
 
-    const { data } = await api.post<AuthResponse>(AUTH_ENDPOINTS.register, formData, {
+    const { data } = await api.post<unknown>(AUTH_ENDPOINTS.register, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
-    return data
+    console.log('[authApi.register] backend response', data)
+    return normalizeAuthResponse(data)
   }
 
-  const { data } = await api.post<AuthResponse>(AUTH_ENDPOINTS.register, body)
-  return data
+  const { data } = await api.post<unknown>(AUTH_ENDPOINTS.register, body)
+  console.log('[authApi.register] backend response', data)
+  return normalizeAuthResponse(data)
 }
 
 export const authApi = {
   endpoints: AUTH_ENDPOINTS,
 
-  login: async (payload: LoginPayload): Promise<AuthResponse> =>
-    withFallback(async () => {
-      const { data } = await api.post<AuthResponse>(AUTH_ENDPOINTS.login, buildLoginBody(payload))
-      return data
-    }, createMockAuthResponse(
-      payload.identifier.split('@')[0],
-      isEmail(payload.identifier) ? payload.identifier : `${payload.identifier}@labora.dev`,
-      isEmail(payload.identifier) ? undefined : payload.identifier,
-    )),
+  login: async (payload: LoginPayload): Promise<AuthResponse> => {
+    const { data } = await api.post<unknown>(AUTH_ENDPOINTS.login, buildLoginBody(payload))
+    console.log('[authApi.login] backend response', data)
 
-  register: async (payload: RegisterPayload): Promise<AuthResponse> =>
-    withFallback(
-      () => postRegister(payload),
-      createMockAuthResponse(payload.fullName, payload.email, payload.username, payload.role),
-    ),
+    const normalized = normalizeAuthResponse(data)
+    console.log('[authApi.login] normalized response', normalized)
+    return normalized
+  },
+
+  register: (payload: RegisterPayload): Promise<AuthResponse> => postRegister(payload),
 
   logout: async (refreshToken?: string): Promise<void> => {
     try {
@@ -165,15 +203,16 @@ export const authApi = {
   },
 
   refreshToken: async (refreshToken: string): Promise<AuthResponse> => {
-    const { data } = await api.post<AuthResponse>(AUTH_ENDPOINTS.refresh, {
+    const { data } = await api.post<unknown>(AUTH_ENDPOINTS.refresh, {
       refresh: refreshToken,
     })
-    return data
+    return normalizeAuthResponse(data)
   },
 
   getMe: async (): Promise<User> => {
-    const { data } = await api.get<User>(AUTH_ENDPOINTS.me)
-    return data
+    const { data } = await api.get<unknown>(AUTH_ENDPOINTS.me)
+    const normalized = normalizeAuthResponse({ user: data, tokens: { accessToken: 'unused' } })
+    return normalized.user
   },
 }
 

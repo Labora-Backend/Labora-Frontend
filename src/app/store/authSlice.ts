@@ -34,7 +34,10 @@ const authSlice = createSlice({
       state.accessToken = tokens.accessToken
       state.isAuthenticated = true
       state.loading = false
+      console.log('[authSlice.setCredentials] Redux auth user.role', user.role)
+      console.log('[authSlice.setCredentials] Redux auth payload', action.payload)
       localStorage.setItem('labora_auth', JSON.stringify(action.payload))
+      console.log('[authSlice.setCredentials] stored labora_auth', localStorage.getItem('labora_auth'))
     },
     hydrateSession: (state) => {
       const value = localStorage.getItem('labora_auth')
@@ -45,6 +48,8 @@ const authSlice = createSlice({
       state.role = parsed.user.role
       state.accessToken = parsed.tokens.accessToken
       state.isAuthenticated = true
+      console.log('[authSlice.hydrateSession] hydrated user.role', parsed.user.role)
+      console.log('[authSlice.hydrateSession] stored labora_auth', parsed)
     },
     logout: (state) => {
       state.user = null
