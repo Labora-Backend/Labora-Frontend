@@ -1,4 +1,5 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
+import { clearStoredAuthSession, readStoredAuthSession } from '@/features/auth/utils/authSession'
 import type { AuthResponse, AuthTokens, User, UserRole } from '@/features/auth/types/auth'
 
 interface AuthState {
@@ -34,22 +35,16 @@ const authSlice = createSlice({
       state.accessToken = tokens.accessToken
       state.isAuthenticated = true
       state.loading = false
-      console.log('[authSlice.setCredentials] Redux auth user.role', user.role)
-      console.log('[authSlice.setCredentials] Redux auth payload', action.payload)
       localStorage.setItem('labora_auth', JSON.stringify(action.payload))
-      console.log('[authSlice.setCredentials] stored labora_auth', localStorage.getItem('labora_auth'))
     },
     hydrateSession: (state) => {
-      const value = localStorage.getItem('labora_auth')
-      if (!value) return
-      const parsed = JSON.parse(value) as AuthResponse
+      const parsed = readStoredAuthSession()
+      if (!parsed) return
       state.user = parsed.user
       state.tokens = parsed.tokens
       state.role = parsed.user.role
       state.accessToken = parsed.tokens.accessToken
       state.isAuthenticated = true
-      console.log('[authSlice.hydrateSession] hydrated user.role', parsed.user.role)
-      console.log('[authSlice.hydrateSession] stored labora_auth', parsed)
     },
     logout: (state) => {
       state.user = null
@@ -58,7 +53,7 @@ const authSlice = createSlice({
       state.accessToken = null
       state.isAuthenticated = false
       state.loading = false
-      localStorage.removeItem('labora_auth')
+      clearStoredAuthSession()
     },
   },
 })

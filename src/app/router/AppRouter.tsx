@@ -7,6 +7,7 @@ import { AdminDashboard } from '@/features/admin/AdminDashboard'
 import { ClientDashboardLayout } from '@/features/client/layout/ClientDashboardLayout'
 import { ClientDashboard } from '@/features/client/pages/ClientDashboard'
 import { FreelancerDashboard } from '@/features/freelancer/FreelancerDashboard'
+import { BrowseJobsPage } from '@/features/freelancer/jobs/pages/BrowseJobsPage'
 import ProfileSetupPage from '@/features/auth/pages/ProfileSetupPage'
 import { LoginPage } from '@/features/auth/pages/LoginPage'
 import { RegisterPage } from '@/features/auth/pages/RegisterPage'
@@ -19,6 +20,22 @@ const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
   { path: '/unauthorized', element: <Unauthorized /> },
+  {
+    path: '/jobs',
+    element: (
+      <FreelancerRoute>
+        <BrowseJobsPage />
+      </FreelancerRoute>
+    ),
+  },
+  {
+    path: '/freelancer/jobs',
+    element: (
+      <FreelancerRoute>
+        <BrowseJobsPage />
+      </FreelancerRoute>
+    ),
+  },
   {
     path: '/client/profile/setup',
     element: (

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { api } from '@/services/api/axios'
+import { isRealJwt, isUserRole } from '@/features/auth/utils/authSession'
 import type {
   AuthApiEndpoints,
   AuthResponse,
@@ -9,7 +10,6 @@ import type {
   LoginPayload,
   RegisterPayload,
   User,
-  UserRole,
 } from '@/features/auth/types/auth'
 
 export const AUTH_ENDPOINTS: AuthApiEndpoints = {
@@ -22,16 +22,11 @@ export const AUTH_ENDPOINTS: AuthApiEndpoints = {
 
 const emailSchema = z.string().email()
 const isEmail = (value: string) => emailSchema.safeParse(value).success
-const USER_ROLES = ['client', 'freelancer', 'admin'] as const
 
 type UnknownRecord = Record<string, unknown>
 
 function isRecord(value: unknown): value is UnknownRecord {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
-}
-
-function isUserRole(value: unknown): value is UserRole {
-  return typeof value === 'string' && USER_ROLES.includes(value as UserRole)
 }
 
 function unwrapDataResponse(response: unknown): unknown {
@@ -55,8 +50,8 @@ function normalizeTokens(response: UnknownRecord): AuthTokens {
     ?? readString(tokenSource.refresh)
     ?? readString(tokenSource.refresh_token)
 
-  if (!accessToken) {
-    throw new Error('Auth response is missing an access token')
+  if (!isRealJwt(accessToken)) {
+    throw new Error('Auth response is missing a valid JWT access token')
   }
 
   return {
@@ -66,24 +61,27 @@ function normalizeTokens(response: UnknownRecord): AuthTokens {
 }
 
 function normalizeUser(response: UnknownRecord): User {
-  if (!isRecord(response.user)) {
-    throw new Error('Auth response is missing user data')
-  }
+  const userSource = isRecord(response.user) ? response.user : response
+  const role = userSource.role
 
-  const role = response.user.role
   if (!isUserRole(role)) {
     throw new Error('Auth response is missing a valid user.role')
   }
 
+  const username = readString(userSource.username)
+  const email = readString(userSource.email) ?? ''
+  const name = readString(userSource.name)
+    ?? readString(userSource.fullName)
+    ?? readString(userSource.full_name)
+    ?? username
+    ?? email
+    ?? ''
+
   return {
-    id: readString(response.user.id) ?? String(response.user.id ?? ''),
-    name: readString(response.user.name)
-      ?? readString(response.user.fullName)
-      ?? readString(response.user.full_name)
-      ?? readString(response.user.username)
-      ?? '',
-    username: readString(response.user.username),
-    email: readString(response.user.email) ?? '',
+    id: readString(userSource.id) ?? username ?? email,
+    name,
+    username,
+    email,
     role,
   }
 }
@@ -171,12 +169,10 @@ async function postRegister(payload: RegisterPayload): Promise<AuthResponse> {
     const { data } = await api.post<unknown>(AUTH_ENDPOINTS.register, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
-    console.log('[authApi.register] backend response', data)
     return normalizeAuthResponse(data)
   }
 
   const { data } = await api.post<unknown>(AUTH_ENDPOINTS.register, body)
-  console.log('[authApi.register] backend response', data)
   return normalizeAuthResponse(data)
 }
 
@@ -185,11 +181,7 @@ export const authApi = {
 
   login: async (payload: LoginPayload): Promise<AuthResponse> => {
     const { data } = await api.post<unknown>(AUTH_ENDPOINTS.login, buildLoginBody(payload))
-    console.log('[authApi.login] backend response', data)
-
-    const normalized = normalizeAuthResponse(data)
-    console.log('[authApi.login] normalized response', normalized)
-    return normalized
+    return normalizeAuthResponse(data)
   },
 
   register: (payload: RegisterPayload): Promise<AuthResponse> => postRegister(payload),
@@ -198,21 +190,28 @@ export const authApi = {
     try {
       await api.post(AUTH_ENDPOINTS.logout, { refresh: refreshToken })
     } catch {
-      // Allow local logout even if API is unavailable
+      // Allow local logout even if API is unavailable.
     }
   },
 
-  refreshToken: async (refreshToken: string): Promise<AuthResponse> => {
+  refreshToken: async (refreshToken: string): Promise<AuthTokens> => {
     const { data } = await api.post<unknown>(AUTH_ENDPOINTS.refresh, {
       refresh: refreshToken,
     })
-    return normalizeAuthResponse(data)
+    const unwrapped = unwrapDataResponse(data)
+    if (!isRecord(unwrapped)) {
+      throw new Error('Refresh response must be an object')
+    }
+    return normalizeTokens(unwrapped)
   },
 
   getMe: async (): Promise<User> => {
     const { data } = await api.get<unknown>(AUTH_ENDPOINTS.me)
-    const normalized = normalizeAuthResponse({ user: data, tokens: { accessToken: 'unused' } })
-    return normalized.user
+    const unwrapped = unwrapDataResponse(data)
+    if (!isRecord(unwrapped)) {
+      throw new Error('User response must be an object')
+    }
+    return normalizeUser(unwrapped)
   },
 }
 
