@@ -37,7 +37,7 @@ export function readStoredAuthSession(): AuthResponse | null {
     const parsed = JSON.parse(value) as unknown
     if (isValidAuthSession(parsed)) return parsed
   } catch {
-    // Malformed auth storage is cleared below.
+    // Malformed auth storage
   }
 
   clearStoredAuthSession()
