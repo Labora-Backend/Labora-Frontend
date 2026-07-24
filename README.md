@@ -12,6 +12,8 @@ This repository contains the initial frontend architecture with routing, state m
 - Axios
 - React Hook Form + Zod
 - Tailwind CSS
+- Framer Motion
+- Recharts
 - Native WebSocket integration placeholders (for Django Channels)
 
 ## Architecture overview
@@ -76,8 +78,14 @@ npm install
 npm run dev
 ```
 
-## Build
+## Other scripts
 
 ```bash
 npm run build
+npm run lint
+npm run preview
 ```
+
+## Project study guide
+
+For a beginner-friendly architecture walkthrough, flow-by-flow explanations, and glossary, see [`PROJECT_STUDY_GUIDE.md`](./PROJECT_STUDY_GUIDE.md).
